@@ -1,0 +1,189 @@
+---
+title: "Lab 5 244"
+author: "Rachel Behm"
+date: "February 7, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+A. Attach Packages
+```{r}
+library(tidyverse)
+library(tseries)
+library(forecast)
+```
+
+B. Get data
+US Residential energy consumtion 1/1973-10/2017
+```{r}
+energy <- read_csv("energy.csv")
+```
+
+month and year information together and we dont want that- what do?
+we only care about res_total
+
+C. create ts timeseries data using res_total column 
+```{r}
+res_ts <- ts(energy$res_total, frequency=12, c(1973,1))
+
+#$ allows us to pull the vector form of that column 
+
+#now lets plot to look at (shows us the time series data we just made)
+plot(res_ts)
+
+
+#trend= yes increase then level off
+#additive= yes, but intermediate peaks increasing
+```
+
+d. Decompose timeseries data
+```{r}
+res_dc <- decompose(res_ts)
+#wow so simple does all the work woo
+
+plot(res_dc)
+#look at scales
+#seasonality scale big= big contributor
+```
+
+e. cool ways to present timeseries data
+```{r}
+monthplot(res_ts)
+#breaks down by month how values are changing for the years
+#we can see huge increase during the summer
+```
+```{r}
+
+ggseasonplot(res_ts)
+#can see general increase by year as well as monthly change (good for checking seasons)
+#similar story in diff way
+
+ggseasonplot(res_ts, polar= TRUE)
+#makes it circular
+
+```
+
+f. Simple moving averages
+use forecase;;ma() to specify windowsize
+```{r}
+#if want window size to be 5 months
+sma_res <- ma(res_ts, order = 5)
+#nas not a suprise since we set window to 5
+plot(sma_res)
+# we can see quite a bit smoother
+
+sma_res2 <- ma(res_ts, order = 12)
+plot(sma_res2)
+
+#CHANGING WINDOW DRASTICALLY ALTERS- WATCH OUT
+#solution= show both MA and original
+
+
+plot(res_ts)
+lines(sma_res, col= "red")
+#now they are plotted together! so you/readers can compare
+```
+
+g. ACF (autocorrelation)
+```{r}
+#acf function does all the annoying work for us
+
+res_acg<- acf(res_ts)
+#drastic and significant peaks every 12 months (makes sense: winter vs summer)
+#can confirm seasonality important
+
+
+#use ggtsdisplay puts everything together
+ggtsdisplay(res_ts)
+#shows original on top, then ACF on bottom, we dont care about pacf yet
+```
+
+1. Holt-Winters: exponential smoothing (stronger weights to recent)
+```{r}
+#can predict that HW will work very well since we see strong seasonality
+
+res_hw <- HoltWinters(res_ts)
+res_hw
+
+plot(res_hw)
+#ya looks pretty darn good
+
+#now we wanna do some forecasting
+
+```
+
+Future forcasting~~~~~~with HW
+```{r}
+res_forecast <- forecast(res_hw, h = 60)
+#h=60 = 5 years
+plot(res_forecast)
+
+#trend not really increasing because less weight to older
+
+
+
+#if we wannna plot in ggplot can call whatever then transform to df then plot in ggplot
+
+#now lets check residuals
+```
+
+Check distribution of the residuals (make sure normal)
+```{r}
+#use $ to call components you want
+hist(res_forecast$residuals)
+#ya looks pretty normal
+```
+
+ARIMA (AutoRegressive integrated moving average) using auto.arima
+```{r}
+#use auto.arima() for p, d, q
+res_pdq <- auto.arima(res_ts)
+res_pdq
+
+```
+
+pdq= (1,0,2)= nonseasonal (0,1,1)=seasonal
+now lets fit the arima model using these inputs
+
+```{r}
+res_arima <- arima(res_ts,c(1,0,2),seasonal = list(order= c(0,1,1)))
+#seasonal has to be a list idk why it wants it like that
+res_arima
+
+
+#now lets check the residuals
+par(mfrow = c(1,2))
+hist(res_arima$residuals)
+qqnorm(res_arima$residuals)
+#par tells it how to be displayed= 1,2 means one row two columns (why theyre in the same pic)
+#looks relatively normal
+```
+
+Now ARIMA forecasting!
+```{r}
+forecast_res <- forecast(res_arima, h= 72)
+plot(forecast_res)
+#looks pretty similar to the holt winters one = as expected
+```
+
+Let's show how to ggplot it
+```{r}
+#we have to coerce to df
+res_df <- data.frame(forecast_res)
+#makes forecast_res a dataframe = woooo
+
+#now lets make month sequence so we dont have to deal with the words (change to 1-72)
+month_seq<- seq(1,72)
+
+res_df_2 <- data.frame(month_seq, res_df)
+#binds them together
+
+
+
+ggplot(res_df_2, aes(x= month_seq, y= Point.Forecast))+ 
+  geom_line()
+```
+
